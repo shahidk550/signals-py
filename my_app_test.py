@@ -3,6 +3,7 @@
 from flask import Flask, render_template, redirect, request
 from flask_scss import Scss
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.sql import func
 from datetime import datetime
 import re
 
@@ -29,21 +30,32 @@ class MyTask(db.Model):
 
 @app.route("/list", methods=["POST", "GET"])
 def index():
-    tasks = MyTask.query.order_by(MyTask.created).all()
+    # Sort by ETA ascending (reformat dd-mm-yyyy to yyyy-mm-dd for string sorting)
+    tasks = MyTask.query.order_by(
+        func.substr(MyTask.eta, 7, 4) + "-" + func.substr(MyTask.eta, 4, 2) + "-" + func.substr(MyTask.eta, 1, 2).asc().nullslast()
+    ).all()
 
     if request.method == "POST":
         signal_from = request.form['signal_from']
         commodity = request.form['commodity']
         departure = request.form['departure']
         arrival_port = request.form['arrival_port']
-        eta_str = request.form['eta'].strip( ) 
+        eta_str = request.form['eta'].strip() 
 
         if not signal_from:
             return render_template('index.html', tasks=tasks, error="Signal From is required")
         
-            # Optional: Validate ETA format
-        if eta_str and not re.match(r'\d{2}-\d{2}-\d{4}', eta_str):
-            return render_template('index.html', tasks=tasks, error="ETA must be in DD-MM-YYYY format (e.g., 04-05-2023).")
+        #Validate ETA format and date 
+        if eta_str:
+            if not re.match(r'\d{2}-\d{2}-\d{4}', eta_str):
+                return render_template('index.html', tasks=tasks, error="ETA must be in DD-MM-YYYY format (e.g., 04-05-2023).")
+
+            try:
+                datetime.strptime(eta_str, '%d-%m-%Y')
+            except ValueError:
+                return render_template('index.html', tasks=tasks, error="Invalid ETA date (e.g., 32-01-2025 is not valid)")
+
+
             
         try:
             eta = eta_str if eta_str else None
@@ -68,10 +80,12 @@ def delete(id):
         db.session.commit()
         return redirect("/list")
     except Exception as e:
-        tasks = MyTask.query.order_by(MyTask.created).all()
+        tasks = MyTask.query.order_by(
+            func.substr(MyTask.eta, 7, 4) + "-" + func.substr(MyTask.eta, 4, 2) + "-" + func.substr(MyTask.eta, 1, 2).asc().nullslast()
+        ).all()
         return render_template('index.html', tasks=tasks, error=str(e))
 
-#create a route for edit function:
+#Creates a route for edit function:
 @app.route("/edit/<int:id>", methods=["GET", "POST"])
 def edit(id:int):
     task = MyTask.query.get_or_404(id) #create a task and id and check if im sending or gettin info
@@ -86,12 +100,17 @@ def edit(id:int):
         if not signal_from:
             return render_template('edit.html', task=task, error="Signal From is required")
         
-        #Validate ETA format
-        if eta_str and not re.match(r'\d{2}-\d{2}-\d{4}', eta_str):
-            return render_template('edit.html', task=task, error="ETA must be in DD-MM-YYYY format (e.g., 04-05-2023).")
+        #Validate ETA format and date 
+        if eta_str:
+            if not re.match(r'\d{2}-\d{2}-\d{4}', eta_str):
+                return render_template('edit.html', task=task, error="ETA must be in DD-MM-YYYY format (e.g., 04-05-2023).")
         
+            try:
+                datetime.strptime(eta_str, '%d-%m-%Y')
+            except ValueError:
+                return render_template('edit.html', task=task, error="Invalid ETA date (e.g., 32-01-2025 is not valid).")
+
         try:
-           
            task.signal_from = signal_from
            task.commodity = commodity
            task.departure = departure
@@ -103,10 +122,10 @@ def edit(id:int):
           
         except Exception as e:
             print(f"Error:{e}")
-    #Create a new page to allow user to edit the data  
+            #Create a new page to allow user to edit the data  
             return render_template('edit.html',task=task, error=str(e))
 
-# Handle GET request: render edit form with task's current values
+    # Handle GET request: render edit form with task's current values
     return render_template('edit.html', task=task)
 
 if __name__ == '__main__':

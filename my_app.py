@@ -1,4 +1,4 @@
-#This code tries to use the eta as datetime but causes a value error in db
+#DO NOT RUN - This code tries to use the eta as datetime but causes a value error in db - 
 
 #imports 
 
