@@ -1,0 +1,90 @@
+{% extends 'base.html'%}
+
+{% block head %}
+<title>Signal List </title>
+
+{% endblock %}
+
+{% block body %}
+<div class="content">
+    <h1>Signal List</h1>
+
+    {% if error %}
+        <p style="color: red;">Error: {{ error }}</p>
+    {% endif %}
+
+    {% if tasks | length <1%}
+    <h2>There are no signals yet...</h2>
+
+    {% else %}
+    <table>
+        <tr>
+            <th>Signal From</th>
+            <th>Commodity</th>
+            <th>Departure</th>
+            <th>Arrival Port</th>
+            <th>ETA</th>
+            <th>Signal Date</th>
+            <th>Actions</th>
+        </tr>
+
+        {% for task in tasks %}
+
+            <tr>
+                <td>{{task.signal_from}}</td>
+                <td>{{task.commodity}}</td>
+                <td>{{task.departure}}</td>
+                <td>{{task.arrival_port}}</td>
+                <td>{{task.eta}}</td>
+
+                <td>{{task.created.strftime("%d-%B-%Y") }}</td>
+                <td>
+                    <a href="/delete/{{task.id}}" class="delete-btn">Delete</a>
+                    <br/>
+                    <a href="/edit/{{task.id}}" class="edit-btn">Edit</a>
+                </td>
+            </tr>
+        {% endfor %}
+
+    </table>
+    {% endif %}
+
+    <h3>Create a signal manually here:<h3>
+
+    <form action="/list" method="POST" class="signal-form">
+    <div class="form-group">
+        <label for="signal_from">Signal From:</label>
+        <input type="text" name="signal_from" id="signal_from" required/>
+    </div>
+
+    <div class="form-group">
+        <label for="commodity">Commodity:</label>
+        <input type="text" name="commodity" id="commodity">
+    </div>
+
+    
+    <div class="form-group">
+        <label for="departure">Departure:</label>
+         <input type="text" name="departure" id="departure">
+    </div>
+
+
+    <div class="form-group">
+        <label for="arrival_port">Arrival Port:</label>
+        <input type="text" name="arrival_port" id="arrival_port">
+    </div>
+
+
+    <div class="form-group">
+        <label for="eta">ETA (dd-mm-yyyy):</label>
+        <input type="text" name="eta" id="eta" placeholder="e.g., 04-05-2025">
+    </div>
+
+
+    <div class="form-group">
+        <input type="submit" value="Add Signal" id="btn_add" />
+    </div>
+
+    </form>
+</div>
+{% endblock %}

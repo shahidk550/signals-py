@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+
+{% block head %}
+<title>Edit Signals</title>
+
+{% endblock %}
+
+
+{% block body%}
+
+<div class="content">
+    <h1>Edit Your Signal</h1>
+
+    {% if error %}
+        <p style="color: red;">Error: {{error}}</p>
+    {% endif %}
+
+
+
+    <form action="/edit/{{task.id}}" method="POST" class='signal-form'>
+        <div class="form-group"> 
+        <label for="signal_from">Signal From:</label>
+        <input type="text" name="signal_from" id="signal_from" value="{{task.signal_from}}" required>
+        </div>
+        
+
+        <div class="form-group">
+        <label for="commodity">Commodity:</label>
+        <input type="text" name="commodity" id="commodity" value="{{ task.commodity or '' }}">
+        </div>
+
+        <div class="form-group">
+        <label for="departure">Departure:</label>
+        <input type="text" name="departure" id="departure" value="{{ task.departure or '' }}">
+        </div>
+
+        <div class="form-group">
+        <label for="arrival_port">Arrival Port:</label>
+        <input type="text" name="arrival_port" id="arrival_port" value="{{ task.arrival_port or '' }}">
+        </div>
+
+        <div class="form-group">
+        <label for="eta">ETA:</label>
+        <input type="text" name="eta" id="eta" value="{{ task.eta or '' }}" placeholder="e.g., 04-05-2023">
+        </div>
+
+
+        <div class="form-group">
+        <input type="submit" value="Update Signal" id="btn_update" />
+        </div>
+
+    </form>
+
+    <p><a href="/list">Back to Signal List</a></p>
+
+</div>
+
+
+{% endblock %}

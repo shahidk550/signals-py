@@ -1,0 +1,175 @@
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 400;
+  font-weight: 16px;
+  margin: 0;
+  padding: 1px;
+  background-color: #f5f8fa;
+  color: #555;
+  line-height: 1.5;
+}
+
+.content {
+  max-width: 800px;
+  margin: 50px auto;
+  padding: 20px;
+  background-color: rgba(179, 232, 224, 0.1);
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.15);
+  text-align: center;
+}
+.content h1 {
+  color: #1a2b3c;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+}
+.content h3 {
+  color: #1a2b3c;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+.content h4 {
+  color: #555;
+  font-weight: 500;
+}
+.content p[style*="color: red"] {
+  background-color: #f8d7da;
+  padding: 10px;
+  border-radius: 5px;
+  color: #721c24;
+  margin-bottom: 20px;
+}
+.content table {
+  width: 100%;
+  margin-top: 20px;
+  border-collapse: collapse;
+  background-color: #fff;
+}
+.content table th, .content table td {
+  padding: 12px;
+  border: 1px solid #dfe4ea;
+  font-size: 14px;
+}
+.content table th {
+  background-color: #17a2b8;
+  color: #fff;
+  font-weight: 600;
+}
+.content table td {
+  background-color: #fafafa;
+  font-weight: 400;
+}
+.content table td:hover {
+  background-color: rgba(23, 162, 184, 0.1);
+}
+.content a {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background-color: #007bff;
+  color: #fff;
+  text-decoration: none;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  border: 1px solid #0062cc;
+  font-weight: 500;
+}
+.content a:hover {
+  background-color: #0056b3;
+  transform: translateY(-2px);
+}
+.content .delete-btn, .content .edit-btn {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  margin: 2px 0;
+  text-decoration: none;
+  display: inline-block;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  font-weight: 500;
+}
+.content .delete-btn {
+  background-color: #d9534f;
+  color: #fff;
+  border: 1px solid #c9302c;
+}
+.content .delete-btn:hover {
+  background-color: #c9302c;
+  transform: translateY(-2px);
+}
+.content .edit-btn {
+  background-color: #007bff;
+  color: #fff;
+  border: 1px solid #0062cc;
+}
+.content .edit-btn:hover {
+  background-color: #0056b3;
+  transform: translateY(-2px);
+}
+.content .signal-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 400px;
+  margin: 0 auto;
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+.content .signal-form .form-group {
+  width: 100%;
+  margin-bottom: 15px;
+  text-align: left;
+}
+.content .signal-form .form-group label {
+  display: block;
+  font-size: 14px;
+  color: #1a2b3c;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+.content .signal-form .form-group input {
+  width: 100%;
+  padding: 8px;
+  margin: 0;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 14px;
+  box-sizing: border-box;
+  font-family: "Inter", sans-serif;
+  font-weight: 400;
+  background-color: #fafafa;
+  transition: border-color 0.3s ease;
+}
+.content .signal-form .form-group input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+}
+.content .signal-form .form-group input[type=submit] {
+  width: auto;
+  padding: 10px 20px;
+  background-color: #28a745;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+.content .signal-form .form-group input[type=submit]:hover {
+  background-color: #218838;
+  transform: translateY(-2px);
+}
+
+#btn_add, #btn_update {
+  font-size: 16px;
+  padding: 10px 20px;
+  background-color: #28a745;
+}
+#btn_add:hover, #btn_update:hover {
+  background-color: #218838;
+}/*# sourceMappingURL=styles.css.map */
