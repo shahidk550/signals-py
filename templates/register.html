@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block head %}
+<title>Register</title>
+{% endblock %}
+
+{% block body %}
+<div class="content">
+    <h1>Register</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <p style="color: {{ 'red' if category == 'error' else 'green' }};">{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form action="/register" method="POST" class="signal-form">
+        {{ form.hidden_tag() }}
+        <div class="form-group">
+            <label for="username">{{ form.username.label }}</label>
+            {{ form.username(id="username", maxlength="50") }}
+            {% if form.username.errors %}
+                {% for error in form.username.errors %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <label for="email">{{ form.email.label }}</label>
+            {{ form.email(id="email", maxlength="120") }}
+            {% if form.email.errors %}
+                {% for error in form.email.errors %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <label for="password">{{ form.password.label }}</label>
+            {{ form.password(id="password") }}
+            {% if form.password.errors %}
+                {% for error in form.password.errors %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <label for="confirm_password">{{ form.confirm_password.label }}</label>
+            {{ form.confirm_password(id="confirm_password") }}
+            {% if form.confirm_password.errors %}
+                {% for error in form.confirm_password.errors %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
+        </div>
+        <div class="form-group">
+            {{ form.submit(id="btn_register", value="Register") }}
+        </div>
+    </form>
+    <p>Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+</div>
+{% endblock %}
