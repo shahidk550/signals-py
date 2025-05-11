@@ -7,7 +7,7 @@
 {% block body %}
 <div class="content">
     <h1>Signal List</h1>
-    <p>Logged in as {{ current_user.username }} | <a href="{{ url_for('logout') }}">Logout</a></p>
+    <p>Logged in as {{ current_user.email }} ({{current_user.role}}) | <a href="{{ url_for('logout') }}">Logout</a></p>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -23,22 +23,48 @@
         <div class="form-group">
             <label for="signal_from">{{ form.signal_from.label }}</label>
             {{ form.signal_from(id="signal_from", maxlength="100") }}
+            {% if form.signal_from.errors %}
+                {% for error in form.signal_from.errors %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
         </div>
         <div class="form-group">
             <label for="commodity">{{ form.commodity.label }}</label>
             {{ form.commodity(id="commodity", maxlength="100") }}
+            {% if form.commodity.errors %}
+                {% for error in form.commodity.errors %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
         </div>
         <div class="form-group">
             <label for="departure">{{ form.departure.label }}</label>
             {{ form.departure(id="departure", maxlength="100") }}
+            {% if form.departure.errors %}
+                {% for error in form.departure.errors %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
+
         </div>
         <div class="form-group">
             <label for="arrival_port">{{ form.arrival_port.label }}</label>
             {{ form.arrival_port(id="arrival_port", maxlength="100") }}
+            {% if form.arrival_port.errors %}
+                {% for error in form.arrival_port.errors %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
         </div>
         <div class="form-group">
             <label for="eta">{{ form.eta.label }}</label>
             {{ form.eta(id="eta", placeholder="e.g., 04-05-2023", maxlength="100") }}
+            {% if form.eta.errors %}
+                {% for error in form.eta.errors %}
+                    <p style="color: red;">{{ error }}</p>
+                {% endfor %}
+            {% endif %}
         </div>
         <div class="form-group">
             {{ form.submit(id="btn_add", value="Add Signal") }}
@@ -56,6 +82,9 @@
                     <th>Arrival Port</th>
                     <th>ETA</th>
                     <th>Signal Date</th>
+                    {% if current_user.role == 'admin' %}
+                        <th>Created By</th>
+                    {% endif %}
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -68,9 +97,16 @@
                         <td>{{ task.arrival_port or '' }}</td>
                         <td>{{ task.eta or '' }}</td>
                         <td>{{ task.created.strftime("%d-%B-%Y") }}</td>
+                        {% if current_user.role == 'admin' %}
+                            <td>{{ task.user.email }}</td>
+                        {% endif %}
                         <td>
-                            <a href="/delete/{{ task.id }}" class="delete-btn">Delete</a>
-                            <a href="/edit/{{ task.id }}" class="edit-btn">Edit</a>
+                            {% if current_user.role == 'admin' or task.user_id == current_user.id %}
+                                <a href="{{ url_for('edit', id=task.id) }}" class="edit-btn">Edit</a>
+                            {% endif %}
+                            {% if task.user_id == current_user.id %}
+                                <a href="{{ url_for('delete', id=task.id) }}" class="delete-btn" onclick="return confirm('Are you sure you want to delete the signal?')">Delete</a>
+                            {% endif %}
                         </td>
                     </tr>
                 {% endfor %}

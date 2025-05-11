@@ -27,7 +27,6 @@ login_manager.login_view = 'login'
 # User model
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(60), nullable=False)  # Stores hashed password
     provider = db.Column(db.String(20), nullable=True)  # For future OAuth (e.g., 'google', 'github')
@@ -59,14 +58,13 @@ class SignalForm(FlaskForm):
     submit = SubmitField('Submit')
 
 class RegisterForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired(), Length(min=3, max=50)])
     email = StringField('Email', validators=[DataRequired(), Email(), Length(max=120)])
     password = PasswordField('Password', validators=[DataRequired(), Length(min=8)])
     confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
     submit = SubmitField('Register')
 
 class LoginForm(FlaskForm):
-    username = StringField('Username', validators=[DataRequired()])
+    email = StringField('Email', validators=[DataRequired(), Email()])
     password = PasswordField('Password', validators=[DataRequired()])
     submit = SubmitField('Login')
 
@@ -85,20 +83,16 @@ def register():
     print(f"Session data: {session.get('csrf_token', 'No CSRF token in session')}")
     if form.validate_on_submit():
         print("Form validated successfully")
-        # Check if username or email exists
-        if User.query.filter_by(username=form.username.data).first():
-            flash('Username already taken.', 'error')
-            return render_template('register.html', form=form)
+        # Check if email exists
         if User.query.filter_by(email=form.email.data).first():
             flash('Email already taken.', 'error')
             return render_template('register.html', form=form)
         # Hash password
         hashed_password = bcrypt.hashpw(form.password.data.encode('utf-8'), bcrypt.gensalt())
         user = User(
-            username=form.username.data,
             email=form.email.data,
             password=hashed_password.decode('utf-8'),
-            provider='local',  # Default for username/password registration
+            provider='local',  # Default for password registration
             role='user'  # All new users are regular users
         )
         try:
@@ -123,11 +117,11 @@ def login():
         return redirect(url_for('index'))
     form = LoginForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(username=form.username.data).first()
+        user = User.query.filter_by(email=form.email.data).first()
         if user and bcrypt.checkpw(form.password.data.encode('utf-8'), user.password.encode('utf-8')):
             login_user(user)
             return redirect(url_for('index'))
-        flash('Invalid username or password.', 'error')
+        flash('Invalid email or password.', 'error')
     return render_template('login.html', form=form)
 
 @app.route('/logout')
@@ -145,7 +139,7 @@ def index():
         tasks = MyTask.query.order_by(MyTask.eta.asc().nullslast()).all()
     else:
         tasks = MyTask.query.filter_by(user_id=current_user.id).order_by(MyTask.eta.asc().nullslast()).all()
-    print(f"Current user: {current_user.username}, Role: {current_user.role}, ID: {current_user.id}")
+    print(f"Current user: {current_user.email}, Role: {current_user.role}, ID: {current_user.id}")
     print(f"Retrieved tasks: {[f'Task {task.id} - {task.signal_from} (User ID: {task.user_id})' for task in tasks]}")
     if request.method == "POST":
         print(f"POST form data: {request.form}")
@@ -186,7 +180,10 @@ def index():
 @app.route("/delete/<int:id>")
 @login_required
 def delete(id):
-    task = MyTask.query.filter_by(id=id, user_id=current_user.id).first_or_404()
+    task = MyTask.query.get_or_404(id)
+    if task.user_id != current_user.id:
+        flash('Unauthorised action: You can only delete your own signal')
+        return redirect(url_for('index'))
     try:
         db.session.delete(task)
         db.session.commit()
@@ -201,7 +198,10 @@ def delete(id):
 @app.route("/edit/<int:id>", methods=["GET", "POST"])
 @login_required
 def edit(id: int):
-    task = MyTask.query.filter_by(id=id, user_id=current_user.id).first_or_404()
+    task = MyTask.query.get_or_404(id) 
+    if task.user_id != current_user.id: 
+        flash('Unauthorised action: You can only edit your own signals')
+        return redirect(url_for('index'))
     form = SignalForm(obj=task)
     if request.method == "POST":
         if form.validate_on_submit():

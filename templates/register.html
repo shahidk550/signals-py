@@ -19,15 +19,6 @@
     <form action="/register" method="POST" class="signal-form">
         {{ form.hidden_tag() }}
         <div class="form-group">
-            <label for="username">{{ form.username.label }}</label>
-            {{ form.username(id="username", maxlength="50") }}
-            {% if form.username.errors %}
-                {% for error in form.username.errors %}
-                    <p style="color: red;">{{ error }}</p>
-                {% endfor %}
-            {% endif %}
-        </div>
-        <div class="form-group">
             <label for="email">{{ form.email.label }}</label>
             {{ form.email(id="email", maxlength="120") }}
             {% if form.email.errors %}
