@@ -1,4 +1,4 @@
-#DO NOT RUN - This code tries to use the eta as datetime but causes a value error in db - 
+#DO NOT RUN - This code tries to use the eta as datetime but causes a value error in db - Run the my_app_test.py instead for now!
 
 #imports 
 
