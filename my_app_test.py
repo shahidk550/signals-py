@@ -18,17 +18,18 @@ import json # Import the jason module
 
 # Load environment variables
 load_dotenv()
-
+log_filename = os.getenv('LOG_FILENAME')
+print(log_filename)
 # Configure logging
-logging.basicConfig(level=logging.INFO, filename='/Users/shahidkhan/Documents/Signals/app.log', format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, filename=log_filename, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # App setup
 app = Flask(__name__) #Creates the web application 
-app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:////Users/shahidkhan/Documents/Signals/database.db" #Tells the app where to find the db
-app.config['SQLALCHEMY_BINDS'] = {
-    'api': os.getenv('SIGNALS_DB_URL', 'postgresql://shahidkhan@localhost/signals_admin')
-}
+app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:////Users/shahid.khan/dev/signals-py/database.db" #Tells the app where to find the db
+#app.config['SQLALCHEMY_BINDS'] = {
+ #   'api': os.getenv('SIGNALS_DB_URL', 'postgresql://shahidkhan@localhost/signals_admin')
+#}
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False 
 
 app.config['SECRET_KEY'] = 'your-unique-secret-key-1234567890'  # Replace with your unique key!
