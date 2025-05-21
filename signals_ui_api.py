@@ -32,7 +32,12 @@ import bcrypt #Tool to securely store the passwords and hash them
 from datetime import datetime #Allows us to work with date and times
 import re #Checking for patterns ie if ETA date looks like a date
 import requests 
+import logging
 
+# Configure logging
+log_filename="api_app.log" #TODO this should be read from .env file 
+logging.basicConfig(level=logging.INFO, filename=log_filename, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # App setup
 app = Flask(__name__) #Creates the web application 
@@ -98,9 +103,24 @@ class LoginForm(FlaskForm): # Defines a form for user login.
 def load_user(user_id): # This function takes a user ID and should return the corresponding user object from the database
     return User.query.get(int(user_id)) # Queries the 'User' table in the database for a user with the given ID and returns the user object.
 
+#new api function
+
+@app.route('/api/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
+def register(): #Handles the showing and processing form when ouser submits it.
+    logger.debug(f'In new api register function')
+    form = RegisterForm() # Creates an instance of the 'RegisterForm'.
+    #TODO check if user in auth already
+    if form.validate_on_submit(): # Checks if the registration form has been submitted (POST request) and if all the validators in the form have passed. 
+        logger.debug(f"check if email exists using the api")
+        logger.debug(f"if doesnt exist check the input is valid (email char )")
+        logger.debug(f"post to auth/register with payload containing email and password")
+        logger.debug(f"check the return status codes from api and handle any errors") 
+    return render_template('register.html', form=form)  
+
+    
 #Defines the web address (/register) for the registration page
 @app.route('/todo/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
-def register(): #Handles the showing and processing form when user submits it.
+def old_register(): #Handles the showing and processing form when user submits it.
     if current_user.is_authenticated: # Checks if the current user is already logged in. 'current_user' is provided by Flask-Login.
         return redirect(url_for('index')) # If logged in, redirects the user to the main page (route named 'index').
     form = RegisterForm() # Creates an instance of the 'RegisterForm'.
