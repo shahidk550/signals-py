@@ -1,6 +1,24 @@
 #TODO 1. create a new API set up.
 #2. go to each function and create a route that works with API - change api/register
 
+'''
+1. resiter user > post to loccalhost 8080/auth/register > payload email & passw. header content type json, validation 
+
+2. display message to user success > do not naviagte user. 
+
+3. create login function > auth/login/ > payload (email, password) > check errors > success status code  - parse returned json and get access token and refresh token. 
+
+4. Edit register route and redirect to login page on succesful creation of user 
+
+5. Find out how to store the access token and refresh token  (http cookie/memory)
+
+6. use access token to create a signal using access token in authorisation header 
+
+7. check to see if access token has expired > if has > use auth/refresh api to get new one.
+
+8. if refresh token expired tell user to log in again. 
+'''
+
 
 from flask import Flask, render_template, redirect, request, flash, url_for, session #Flask is the main tool to help build the website/app and also manage the pages, requests and flow of info.
 from flask_scss import Scss #makes it easier to manage css
@@ -13,6 +31,8 @@ from sqlalchemy.sql import func #Access to dcv functions like sorting data
 import bcrypt #Tool to securely store the passwords and hash them
 from datetime import datetime #Allows us to work with date and times
 import re #Checking for patterns ie if ETA date looks like a date
+import requests 
+
 
 # App setup
 app = Flask(__name__) #Creates the web application 
@@ -20,6 +40,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///database.db" #Tells the app w
 app.config['SECRET_KEY'] = 'your-unique-secret-key-1234567890'  # Replace with your unique key!
 app.config['SESSION_COOKIE_SECURE'] = False  # Disabled for local testing (no HTTPS), in real website turn to TRUE
 app.config['PERMANENT_SESSION_LIFETIME'] = 1800  # 30 minutes
+
 Scss(app) #App will use Scss for styling CSS
 db = SQLAlchemy(app) #Connects the app the the db using Flask-SQLAlchemy
 
@@ -78,7 +99,7 @@ def load_user(user_id): # This function takes a user ID and should return the co
     return User.query.get(int(user_id)) # Queries the 'User' table in the database for a user with the given ID and returns the user object.
 
 #Defines the web address (/register) for the registration page
-@app.('/todo/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
+@app.route('/todo/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
 def register(): #Handles the showing and processing form when user submits it.
     if current_user.is_authenticated: # Checks if the current user is already logged in. 'current_user' is provided by Flask-Login.
         return redirect(url_for('index')) # If logged in, redirects the user to the main page (route named 'index').

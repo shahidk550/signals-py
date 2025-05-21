@@ -37,7 +37,7 @@ class MyTask(db.Model): #No task can have the same ID - Model represents one sig
 
 
 #route to homepage
-@app.route("/list", methods=["POST", "GET"]) #Homepage can add and get data
+@app.route("/todo/list", methods=["POST", "GET"]) #Homepage can add and get data
 def index():
 
 

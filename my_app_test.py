@@ -135,7 +135,7 @@ def load_user(user_id):  # This function takes a user ID and should return the c
 #----------UI Routes-------------------------------------------------------
 
 #Defines the web address (/register) for the registration page (Web UI Routes)
-@app.route('/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
+@app.route('/todo/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
 def register(): #Handles the showing and processing form when user submits it.
     if current_user.is_authenticated: # Checks if the current user is already logged in. 'current_user' is provided by Flask-Login.
         return redirect(url_for('index')) # If logged in, redirects the user to the main page (route named 'index').
@@ -186,7 +186,7 @@ def register(): #Handles the showing and processing form when user submits it.
     return render_template('register.html', form=form) # Renders the registration form (for the initial GET request or if validation fails).
 
 
-@app.route('/login', methods=['GET', 'POST'])  # Decorator for the login page URL, handling both displaying the form (GET) and processing the login attempt (POST).
+@app.route('/todo/login', methods=['GET', 'POST'])  # Decorator for the login page URL, handling both displaying the form (GET) and processing the login attempt (POST).
 def login(): # Handles showing the login form and checking user credentials upon submission.
     if current_user.is_authenticated: # Checks if the current user is already logged in.
         return redirect(url_for('index')) # If logged in, redirects to the main page.
@@ -200,7 +200,7 @@ def login(): # Handles showing the login form and checking user credentials upon
         flash('Invalid email or password.', 'error') # If the login fails (wrong email or password), displays an error message.
     return render_template('login.html', form=form) # Renders the login form (for the initial GET request or if login fails).
 
-@app.route('/logout') # Decorator for the logout URL.
+@app.route('/todo/logout') # Decorator for the logout URL.
 @login_required # Flask-Login decorator that ensures only logged-in users can access this route.
 def logout(): # Handles the user logout process.
     logout_user() # Logs the current user out using Flask-Login, clearing their session.
@@ -208,7 +208,7 @@ def logout(): # Handles the user logout process.
     return redirect(url_for('login')) # Redirects the user back to the login page.
 
 #Main page where users can see list of signals 
-@app.route("/list", methods=["POST", "GET"]) # if user visits [GET] show signals. If user submits a form [POST] if valid create new signal.
+@app.route("/todo/list", methods=["POST", "GET"]) # if user visits [GET] show signals. If user submits a form [POST] if valid create new signal.
 @login_required # Ensures only logged-in users can access this page.
 def index(): # Handles displaying the list of signals and adding new ones.
     form = SignalForm() # Creates an instance of the 'SignalForm' for adding new signals.
@@ -254,7 +254,7 @@ def index(): # Handles displaying the list of signals and adding new ones.
     return render_template('index.html', tasks=tasks, form=form) # This line is reached if the request method was GET (the user just visited the '/list' page), and it renders the 'index.html' template to display the initial list of tasks and the empty form for adding new signals.
 
 #Allows logged in users to delete their own signals 
-@app.route("/delete/<int:id>") # This decorator defines a new URL route '/delete/<int:id>'. When a user visits a URL like '/delete/123', the 'delete' function will be executed, and 'id' will be the number in the URL (e.g., 123). '<int:id>' specifies that 'id' should be treated as an integer.
+@app.route("/todo/delete/<int:id>") # This decorator defines a new URL route '/delete/<int:id>'. When a user visits a URL like '/delete/123', the 'delete' function will be executed, and 'id' will be the number in the URL (e.g., 123). '<int:id>' specifies that 'id' should be treated as an integer.
 @login_required # Ensures that only logged-in users can access this URL.
 def delete(id): # This function handles the deletion of a specific signal based on its ID.
     task = MyTask.query.get_or_404(id) # This line tries to find a 'MyTask' object in the database with the given 'id'. If a task with that ID is found, it's stored in the 'task' variable. If no task is found, it automatically returns a 404 (Not Found) error to the user.
@@ -275,7 +275,7 @@ def delete(id): # This function handles the deletion of a specific signal based 
         return redirect("/list")
 
 #Allows logged in users to edit their own signals and updates existing data and database. 
-@app.route("/edit/<int:id>", methods=["GET", "POST"]) # This decorator defines a URL route '/edit/<int:id>' that handles both GET requests (to display the edit form) and POST requests (to submit the edited data).
+@app.route("/todo/edit/<int:id>", methods=["GET", "POST"]) # This decorator defines a URL route '/edit/<int:id>' that handles both GET requests (to display the edit form) and POST requests (to submit the edited data).
 @login_required # Ensures only logged-in users can access this URL.
 def edit(id: int): # This function handles the editing of a specific signal based on its ID.
     task = MyTask.query.get_or_404(id) # Retrieves the 'MyTask' object with the given 'id' from the database, or returns a 404 error if not found.
@@ -314,7 +314,7 @@ def edit(id: int): # This function handles the editing of a specific signal base
 #------------API Routes--------------------------------------------
 
 
-@app.route('/api/register_form', methods=['GET', 'POST'])
+@app.route('/todo/api/register_form', methods=['GET', 'POST'])
 def api_register_form():
     form = APIRegisterForm()
     if form.validate_on_submit():
@@ -386,7 +386,7 @@ def api_register_form():
     logger.info("API register_form - Rendering form")
     return render_template('api_register.html', form=form)
 
-@app.route('/api/register', methods=['POST'])
+@app.route('/todo/api/register', methods=['POST'])
 def api_register():
     data = request.get_json()
     if not data or 'email' not in data or 'password' not in data:
