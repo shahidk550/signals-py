@@ -93,10 +93,18 @@ class RegisterForm(FlaskForm):# Defines a form for user registration.
     confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')]) # A password confirmation field, requires data and must be equal to the value entered in the 'password' field.
     submit = SubmitField('Register') # A submit button for the registration form.
 
+
+class APIRegisterForm(FlaskForm):
+    email = StringField('Email', validators=[DataRequired(), Email(), Length(max=120)])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=11)])
+    submit = SubmitField('Register via API')
+
+
 class LoginForm(FlaskForm): # Defines a form for user login.
     email = StringField('Email', validators=[DataRequired(), Email()]) 
     password = PasswordField('Password', validators=[DataRequired()])
     submit = SubmitField('Login')
+
 
 # Flask-Login user manager 
 @login_manager.user_loader # A decorator that registers a function to load a user from the database based on their ID, which Flask-Login stores in the user's session.
@@ -108,14 +116,15 @@ def load_user(user_id): # This function takes a user ID and should return the co
 @app.route('/api/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
 def register(): #Handles the showing and processing form when ouser submits it.
     logger.debug(f'In new api register function')
-    form = RegisterForm() # Creates an instance of the 'RegisterForm'.
+    form = APIRegisterForm() # Creates an instance of the 'API Register Form'.
     #TODO check if user in auth already
     if form.validate_on_submit(): # Checks if the registration form has been submitted (POST request) and if all the validators in the form have passed. 
+        logger.debug(f"POST /register HTTP/1.1 404  -") # why
         logger.debug(f"check if email exists using the api")
-        logger.debug(f"if doesnt exist check the input is valid (email char )")
+        logger.debug(f"if doesnt exist check the input is valid (email char)")
         logger.debug(f"post to auth/register with payload containing email and password")
         logger.debug(f"check the return status codes from api and handle any errors") 
-    return render_template('register.html', form=form)  
+    return render_template('api_register.html', form=form)  
 
     
 #Defines the web address (/register) for the registration page
