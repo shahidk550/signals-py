@@ -33,6 +33,7 @@ from datetime import datetime #Allows us to work with date and times
 import re #Checking for patterns ie if ETA date looks like a date
 import requests 
 import logging
+from flask_wtf.csrf import CSRFProtect
 
 # Configure logging
 log_filename="api_app.log" #TODO this should be read from .env file 
@@ -44,6 +45,7 @@ app = Flask(__name__) #Creates the web application
 app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///database.db" #Tells the app where to find the db
 app.config['SECRET_KEY'] = 'your-unique-secret-key-1234567890'  # Replace with your unique key!
 app.config['SESSION_COOKIE_SECURE'] = False  # Disabled for local testing (no HTTPS), in real website turn to TRUE
+csrf = CSRFProtect(app)
 app.config['PERMANENT_SESSION_LIFETIME'] = 1800  # 30 minutes
 
 Scss(app) #App will use Scss for styling CSS
@@ -124,8 +126,55 @@ def register(): #Handles the showing and processing form when ouser submits it.
         logger.debug(f"if doesnt exist check the input is valid (email char)")
         logger.debug(f"post to auth/register with payload containing email and password")
         logger.debug(f"check the return status codes from api and handle any errors") 
-    return render_template('api_register.html', form=form)  
 
+        try:
+            api_url =  "http://localhost:8080/auth/register"
+            response = requests.post(api_url, json={"email" : form.email.data, "password" : form.password.data}, headers={"Content-Type" : "application/json"}, timeout=10)
+            logger.info(f"API register - Status: {response.status_code}, Body: {response.text}")
+            if response.status_code == 201:
+                flash('Registration Successful! Please log in now', 'success')
+                return redirect(url_for('register')) #TODO login page to be crafted - this is a placeholder
+
+            elif response.status_code == 409:
+                flash('Email already registered', 'error')
+            
+            elif response.status_code == 400:
+                flash('Invalid email or password format')
+
+            else: 
+                flash('Registration failed: API error', 'error')
+            logger.warning(f"API register - Failed: {response.text}")
+            return render_template('api_register.html', form=form)
+    
+        except requests.exceptions.RequestException as e:
+            flash('Failed to connect to API', 'error')
+            logger.error(f"API register - Connection error: {str(e)}")
+            return render_template('api_register.html', form=form)
+
+    else:
+        logger.debug(f"API register - Form validation failed: {form.errors}")
+    
+    return render_template('api_register.html', form=form)
+
+
+'''
+@app.route('/api/register', methods=['GET', 'POST'])
+def register():
+    form = APIRegisterForm()
+    if form.validate_on_submit():
+        logger.debug(f"Email: {form.email.data}, Password: {form.password.data}")
+        try:
+            api_url =  "http://localhost:8080/auth/register"
+            logger.debug(f"Attempting POST to: {api_url}")
+            response = requests.post(api_url, json={"email" : form.email.data, "password" : form.password.data}, headers={"Content-Type" : "application/json"}, timeout=10)
+            logger.info(f"API register - Status: {response.status_code}, Body: {response.text}")
+            # ... rest of your response handling ...
+        except requests.exceptions.RequestExceptions as e:
+            logger.error(f"Connection error: {e}")
+            # ... rest of your error handling ...
+        return render_template('api_register.html', form=form) # Keep this for now
+    return render_template('api_register.html', form=form)
+'''
     
 #Defines the web address (/register) for the registration page
 @app.route('/todo/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
