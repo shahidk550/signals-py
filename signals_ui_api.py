@@ -41,7 +41,7 @@ logging.basicConfig(level=logging.INFO, filename=log_filename, format='%(asctime
 logger = logging.getLogger(__name__)
 
 # App setup
-app = Flask(__name__) #Creates the web application 
+app = Flask(__name__, template_folder='templates') #Creates the web application 
 app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///database.db" #Tells the app where to find the db
 app.config['SECRET_KEY'] = 'your-unique-secret-key-1234567890'  # Replace with your unique key!
 app.config['SESSION_COOKIE_SECURE'] = False  # Disabled for local testing (no HTTPS), in real website turn to TRUE
@@ -54,7 +54,7 @@ db = SQLAlchemy(app) #Connects the app the the db using Flask-SQLAlchemy
 # Initialize Flask-Login 
 login_manager = LoginManager() #Sets up the login manager 
 login_manager.init_app(app) #Connects the login manager to Flask app/site
-login_manager.login_view = 'login' #Tells Flask-Login where to the send users if they need to login.
+login_manager.login_view = 'api_login' #Tells Flask-Login where to the send users if they need to login.
 
 # User model - represents the user in the table of db
 class User(db.Model, UserMixin): #Blueprint for how we store the data - each user will have id, email. pw, provider and role (i.e admin). Inherets 'db.Model and 'UserMixin' (from Flask-Login, providing default implementations for user properties).
@@ -91,7 +91,7 @@ class SignalForm(FlaskForm): # Defines a form for creating or editing 'MyTask' o
 
 class RegisterForm(FlaskForm):# Defines a form for user registration.
     email = StringField('Email', validators=[DataRequired(), Email(), Length(max=120)]) # An email field, requires data, must be a valid email format, and can be up to 120 characters.
-    password = PasswordField('Password', validators=[DataRequired(), Length(min=8)])  # A password field, requires data and must be at least 8 characters long.
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=11)])  # A password field, requires data and must be at least 8 characters long.
     confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')]) # A password confirmation field, requires data and must be equal to the value entered in the 'password' field.
     submit = SubmitField('Register') # A submit button for the registration form.
 
@@ -104,7 +104,7 @@ class APIRegisterForm(FlaskForm):
 
 class LoginForm(FlaskForm): # Defines a form for user login.
     email = StringField('Email', validators=[DataRequired(), Email()]) 
-    password = PasswordField('Password', validators=[DataRequired()])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=11)])
     submit = SubmitField('Login')
 
 
@@ -120,26 +120,34 @@ def register(): #Handles the showing and processing form when ouser submits it.
     logger.debug(f'In new api register function')
     form = APIRegisterForm() # Creates an instance of the 'API Register Form'.
     #TODO check if user in auth already
-    if form.validate_on_submit(): # Checks if the registration form has been submitted (POST request) and if all the validators in the form have passed. 
-        logger.debug(f"POST /register HTTP/1.1 404  -") # why
-        logger.debug(f"check if email exists using the api")
-        logger.debug(f"if doesnt exist check the input is valid (email char)")
-        logger.debug(f"post to auth/register with payload containing email and password")
-        logger.debug(f"check the return status codes from api and handle any errors") 
+    if form.validate_on_submit(): # Checks if the registration form has been submitted (POST request) and if all the validators in the form have passed.
+        logger.info('In API register function')
+        email = form.email.data
+        password = form.password.data
+
 
         try:
             api_url =  "http://localhost:8080/auth/register"
-            response = requests.post(api_url, json={"email" : form.email.data, "password" : form.password.data}, headers={"Content-Type" : "application/json"}, timeout=10)
+            response = requests.post(
+                api_url, 
+                json={"email" : form.email.data, "password" : form.password.data}, 
+                headers={"Content-Type" : "application/json"}, 
+                timeout=10
+            )
             logger.info(f"API register - Status: {response.status_code}, Body: {response.text}")
+            
             if response.status_code == 201:
                 flash('Registration Successful! Please log in now', 'success')
-                return redirect(url_for('register')) #TODO login page to be crafted - this is a placeholder
+                logger.info(f"API register - Success for email {email}")
+                return redirect(url_for('api_login')) #login page. 
 
             elif response.status_code == 409:
                 flash('Email already registered', 'error')
+                logger.warning(f"API register - Email already registered: {email}")
             
             elif response.status_code == 400:
                 flash('Invalid email or password format')
+                logger.warning(f"API register - Invalid input: {response.text}")
 
             else: 
                 flash('Registration failed: API error', 'error')
@@ -158,6 +166,8 @@ def register(): #Handles the showing and processing form when ouser submits it.
 
 
 '''
+#Smaller registration code for testing without the validation.
+
 @app.route('/api/register', methods=['GET', 'POST'])
 def register():
     form = APIRegisterForm()
@@ -175,7 +185,75 @@ def register():
         return render_template('api_register.html', form=form) # Keep this for now
     return render_template('api_register.html', form=form)
 '''
-    
+
+#API Log in function 
+@app.route('/api/login', methods=['GET', 'POST'])
+def api_login():
+    logger.info('In API login function')
+    form = LoginForm()
+    if form.validate_on_submit():
+        logger.info(f"API login - Form validated, email: {form.email.data}")
+        email = form.email.data
+        password = form.password.data
+
+        try:
+            api_url = "http://localhost:8080/auth/login"
+            response = requests.post (
+                api_url,
+                json={"email": email, "password": password},
+                headers={"Content-Type": "application/json"},
+                timeout=10
+            )
+            logger.info(f"API login - Status: {response.status_code}, Body: {response.text}")
+
+            if response.status_code == 200:
+                data = response.json()
+                access_token = data.get('access_token')
+                account_id = data.get('account_id')
+                role = data.get('role')
+
+                #store in session 
+                session['access_token'] = access_token
+                session['account_id'] = account_id 
+                session['role'] = role
+                session['email'] = email
+
+                flash ('Login successful!', 'success')
+                logger.info(f"API login - Successful for email: {email}, role: {role}")
+                return redirect(url_for('api_dashboard')) #Placeholder
+
+            elif response.status_code == 400:
+                flash('Invalid email or password format,', 'error')
+                logger.warning(f"API login - Invalid input: {response.text}")
+
+            elif response.status_code == 401: 
+                flash('Invalid email or password.', 'error')
+                logger.warning(f"API login - Unexpected status {response.status_code}: {response.text}")
+            
+            return render_template('api_login.html', form=form)
+
+        except requests.exceptions.RequestException as e:
+            flash('Failed to connect to API.', 'error')
+            logger.error(f"API login - Connection error: {str(e)}")
+            return render_template('api_login.html', form=form)
+
+    else: 
+        logger.debug(f"API login - Form Validaton Failed: {form.errors}")
+
+    return render_template('api_login.html', form=form)
+
+
+
+@app.route('/api/dashboard')
+def api_dashboard():
+    if 'access_token' not in session:
+        flash('Please log in.', 'error')
+        return redirect(url_for('api_login'))
+    return render_template('api_dashboard.html', email=session.get('email'), role=session.get('role'))
+
+
+'''
+
 #Defines the web address (/register) for the registration page
 @app.route('/todo/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
 def old_register(): #Handles the showing and processing form when user submits it.
@@ -336,7 +414,7 @@ def edit(id: int): # This function handles the editing of a specific signal base
         return render_template('edit.html', task=task, form=form) # If the form submission was not valid, re-renders the edit form with validation errors.
     return render_template('edit.html', task=task, form=form)  # For a GET request (when the user first visits the edit page), this renders the 'edit.html' template, pre-filled with the 'task' data in the 'form'.
 
-
+'''
 #Only runs the code when Python file is executed directly
 if __name__ == '__main__': # This is a standard Python construct that checks if the script is being run directly (not imported as a module).
     with app.app_context(): # Creates an application context. This is needed for certain operations like database interactions outside of a request context.
