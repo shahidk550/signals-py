@@ -24,7 +24,7 @@ from flask import Flask, render_template, redirect, request, flash, url_for, ses
 from flask_scss import Scss #makes it easier to manage css
 from flask_sqlalchemy import SQLAlchemy #Db to manage information 
 from flask_wtf import FlaskForm #Helps to create and manage the forms on the website - text boxes, passwords, buttons etc
-from wtforms import StringField, PasswordField, SubmitField #Rules for the forms
+from wtforms import StringField, PasswordField, SubmitField, TextAreaField #Rules for the forms
 from wtforms.validators import DataRequired, Length, Email, EqualTo, Regexp #Rules we can set for the forms 
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user #Helps to manage the logins, logouts and track who is using the site.
 from sqlalchemy.sql import func #Access to dcv functions like sorting data 
@@ -34,6 +34,13 @@ import re #Checking for patterns ie if ETA date looks like a date
 import requests 
 import logging
 from flask_wtf.csrf import CSRFProtect
+import json 
+import os 
+from dotenv import load_dotenv
+
+# Load environment variables (e.g., LOG_FILENAME for logging)
+load_dotenv()
+log_filename = os.getenv('LOG_FILENAME', 'api_app.log')
 
 # Configure logging
 log_filename="api_app.log" #TODO this should be read from .env file 
@@ -46,7 +53,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///database.db" #Tells the app w
 app.config['SECRET_KEY'] = 'your-unique-secret-key-1234567890'  # Replace with your unique key!
 app.config['SESSION_COOKIE_SECURE'] = False  # Disabled for local testing (no HTTPS), in real website turn to TRUE
 csrf = CSRFProtect(app)
-app.config['PERMANENT_SESSION_LIFETIME'] = 1800  # 30 minutes
+app.config['PERMANENT_SESSION_LIFETIME'] = 1800  # 30 minutes session expiry as per token 
 
 Scss(app) #App will use Scss for styling CSS
 db = SQLAlchemy(app) #Connects the app the the db using Flask-SQLAlchemy
@@ -108,12 +115,71 @@ class LoginForm(FlaskForm): # Defines a form for user login.
     submit = SubmitField('Login')
 
 
+class SignalSubmitForm(FlaskForm):
+    # Form for submitting signals to the API
+    isn_slug = StringField('ISN Slug', validators=[DataRequired(), Length(max=100)])
+    signal_type_slug = StringField('Signal Type Slug', validators=[DataRequired(), Length(max=100)])
+    sem_ver = StringField('Semantic Version', validators=[DataRequired(), Regexp(r'^\d+\.\d+\.\d+$', message="Must be in format X.Y.Z (e.g., 0.0.1)")])
+    local_ref = StringField('Local Reference', validators=[DataRequired(), Length(max=100)])
+    content = TextAreaField('Content (JSON)', validators=[DataRequired()])
+    correlation_id = StringField('Correlation ID', validators=[Length(max=100)])
+    submit = SubmitField('Submit Signal')
+
+
+
 # Flask-Login user manager 
 @login_manager.user_loader # A decorator that registers a function to load a user from the database based on their ID, which Flask-Login stores in the user's session.
 def load_user(user_id): # This function takes a user ID and should return the corresponding user object from the database
     return User.query.get(int(user_id)) # Queries the 'User' table in the database for a user with the given ID and returns the user object.
 
-#new api function
+#new api function ------------------------------------------------------------
+
+
+def refresh_access_token():
+    # Calls POST /auth/token to refresh access_token using current token and refresh token cookie
+    # Returns True if successful, False if refresh token is invalid
+    logger.info('Attempting to refresh access token')
+    if 'access_token' not in session:
+        logger.warning('No access_token in session for refresh')
+        return False
+
+    try:
+        # Send refresh request to API server
+        # Current (possibly expired) access_token is used for identification
+        # Browser automatically sends refresh token cookie (HTTP-only)
+        api_url = "http://localhost:8080/auth/token"
+        headers = {
+            "Authorization": f"Bearer {session['access_token']}",
+            "Content-Type": "application/json"
+        }
+        response = requests.post(api_url, headers=headers, timeout=10)
+        logger.info(f"Token refresh - Status: {response.status_code}, Body: {response.text}")
+
+        if response.status_code == 200:
+            # Extract new access_token and user data
+            data = response.json()
+            session['access_token'] = data.get('access_token')  # New JWT
+            session['account_id'] = data.get('account_id')      # Update account_id
+            session['role'] = data.get('role')                  # Update role
+            # Note: email not returned, retained from login
+            logger.info('Token refresh - Successful')
+            return True
+
+        elif response.status_code == 401:
+            # Invalid or expired refresh token
+            logger.warning('Token refresh - Unauthorized: Invalid refresh token')
+            session.clear()  # Clear session to force login
+            return False
+
+        else:
+            # Other errors (400, 500)
+            logger.warning(f"Token refresh - Failed: {response.text}")
+            return False
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Token refresh - Connection error: {str(e)}")
+        return False
+
 
 @app.route('/api/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
 def register(): #Handles the showing and processing form when ouser submits it.
@@ -188,7 +254,8 @@ def register():
 
 #API Log in function 
 @app.route('/api/login', methods=['GET', 'POST'])
-def api_login():
+def api_login():# Handles user login via API server[](http://localhost:8080/auth/login)
+    # Generates and stores access_token in session
     logger.info('In API login function')
     form = LoginForm()
     if form.validate_on_submit():
@@ -196,7 +263,7 @@ def api_login():
         email = form.email.data
         password = form.password.data
 
-        try:
+        try:# Send login request to API server to obtain access_token
             api_url = "http://localhost:8080/auth/login"
             response = requests.post (
                 api_url,
@@ -206,20 +273,24 @@ def api_login():
             )
             logger.info(f"API login - Status: {response.status_code}, Body: {response.text}")
 
-            if response.status_code == 200:
+            if response.status_code == 200: # Extract access_token and user data from API response
                 data = response.json()
-                access_token = data.get('access_token')
+                access_token = data.get('access_token') # JWT for authentication
                 account_id = data.get('account_id')
                 role = data.get('role')
 
-                #store in session 
-                session['access_token'] = access_token
-                session['account_id'] = account_id 
-                session['role'] = role
-                session['email'] = email
+
+                # Store access_token and user data in Flask session
+                # Session is server-side, with a signed cookie sent to the browser
+                # SECRET_KEY signs the session cookie for security
+                session['access_token'] = access_token # Used to authenticate /api/dashboard
+                session['account_id'] = account_id   # Links to user identity
+                session['role'] = role      # Used in dashboard.html
+                session['email'] = email    # Used in dashboard.html
 
                 flash ('Login successful!', 'success')
                 logger.info(f"API login - Successful for email: {email}, role: {role}")
+                # Redirect to /api/dashboard, where access_token is checked
                 return redirect(url_for('api_dashboard')) #Placeholder
 
             elif response.status_code == 400:
@@ -245,11 +316,143 @@ def api_login():
 
 
 @app.route('/api/dashboard')
+
+# Protected route requiring access_token in session
+    # Renders dashboard.html with user data from session
 def api_dashboard():
+    # Protected route requiring access_token in session
+    # Renders dashboard.html with user data from session and signal submission form
+    logger.info(f"Template folder: {app.template_folder}")
+    template_path = os.path.join(app.template_folder, 'api_dashboard.html')
+    logger.info(f"Checking template: {template_path}, exists: {os.path.exists(template_path)}")
+    static_path = os.path.join(app.static_folder, 'styles.css')
+    logger.info(f"Checking static file: {static_path}, exists: {os.path.exists(static_path)}")
+
+    # Check if access_token exists in session to authenticate user
+    # Browser sends session cookie, which Flask verifies using SECRET_KEY
     if 'access_token' not in session:
         flash('Please log in.', 'error')
+        # Redirect to /api/login if no token, ending request
         return redirect(url_for('api_login'))
-    return render_template('api_dashboard.html', email=session.get('email'), role=session.get('role'))
+
+    # Pass SignalSubmitForm to dashboard.html for signal submission
+    form = SignalSubmitForm()
+    # Access session data for rendering dashboard
+    # email and role are passed to dashboard.html for display
+    return render_template('api_dashboard.html', email=session.get('email'), role=session.get('role'), form=form)
+
+
+@app.route('/api/submit_signal', methods=['POST'])
+def submit_signal():
+    # Handles signal submission to API server[](http://localhost:8080/isn/{isn_slug}/signal_types/{signal_type_slug}/v{sem_ver}/signals)
+    # Uses access_token from session for authentication
+    # Refreshes token on 401 "access_token_expired" and retries
+    logger.info('In API submit_signal function')
+    form = SignalSubmitForm()
+    if form.validate_on_submit():
+        logger.info(f"API submit_signal - Form validated, isn_slug: {form.isn_slug.data}")
+
+        # Check if access_token exists in session
+        if 'access_token' not in session:
+            flash('Please log in to submit signals.', 'error')
+            return redirect(url_for('api_login'))
+
+        def send_signal_request():
+            # Helper function to send signal request (allows retry after refresh)
+            try:
+                # Parse content as JSON
+                content = json.loads(form.content.data)
+            except json.JSONDecodeError:
+                flash('Invalid JSON format in content.', 'error')
+                logger.warning('API submit_signal - Invalid JSON in content')
+                return redirect(url_for('api_dashboard'))
+
+            # Construct signal payload
+            signal = {
+                "content": content,
+                "local_ref": form.local_ref.data
+            }
+            if form.correlation_id.data:
+                signal["correlation_id"] = form.correlation_id.data
+
+            payload = {
+                "signals": [signal]
+            }
+
+            # Construct API URL
+            api_url = f"http://localhost:8080/api/isn/{form.isn_slug.data}/signal_types/{form.signal_type_slug.data}/v{form.sem_ver.data}/signals"
+            logger.info(f"API submit_signal - Sending to URL: {api_url}, Payload: {json.dumps(payload)}")
+
+
+            # Send POST request to API server with access_token
+            headers = {
+                "Authorization": f"Bearer {session['access_token']}",
+                "Content-Type": "application/json"
+            }
+            response = requests.post(
+                api_url,
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+            return response
+
+        # Attempt to send signal
+        response = send_signal_request()
+        logger.info(f"API submit_signal - Status: {response.status_code}, Body: {response.text}")
+
+        if response.status_code == 401 and 'access_token_expired' in response.text.lower():
+            # Access token expired; attempt to refresh
+            if refresh_access_token():
+                # Retry signal submission with new token
+                response = send_signal_request()
+                logger.info(f"API submit_signal - Retry status: {response.status_code}, Body: {response.text}")
+            else:
+                # Refresh failed (invalid refresh token)
+                flash('Session expired. Please log in again.', 'error')
+                return redirect(url_for('api_login'))
+
+        # Handle response
+        if response.status_code == 201:
+            # Signal stored successfully
+            data = response.json()
+            flash(f"Signal submitted successfully! Stored signals: {len(data.get('stored_signals', []))}", 'success')
+            logger.info(f"API submit_signal - Success for local_ref: {form.local_ref.data}")
+            return redirect(url_for('api_dashboard'))
+
+        elif response.status_code == 400:
+            # Handle validation errors (e.g., missing fields, invalid correlation_id)
+            error_msg = response.json().get('error', 'Invalid request')
+            if 'invalid_correlation_id' in response.text:
+                error_msg = 'Invalid correlation ID: must reference an existing signal of the same type.'
+            flash(f"Submission failed: {error_msg}", 'error')
+            logger.warning(f"API submit_signal - Bad request: {response.text}")
+
+        elif response.status_code == 401:
+            # Other unauthorized errors (e.g., invalid token, no ISN permission)
+            flash('Unauthorized: Invalid token or insufficient permissions.', 'error')
+            logger.warning('API submit_signal - Unauthorized')
+            return redirect(url_for('api_dashboard'))
+
+        elif response.status_code == 404:
+            # ISN, signal type, or version not found
+            flash('Submission failed: ISN or signal type not found. Please check the ISN and signal type.', 'error')
+            logger.warning(f"API submit_signal - Not found: {response.text}")
+
+        else:
+            # Other errors (e.g., 500)
+            flash('Submission failed: API server error.', 'error')
+            logger.warning(f"API submit_signal - Failed: {response.text}")
+
+        return redirect(url_for('api_dashboard'))
+
+    else:
+        logger.debug(f"API submit_signal - Form validation failed: {form.errors}")
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f"Error in {field}: {error}", 'error')
+        return redirect(url_for('api_dashboard'))
+
 
 
 '''
