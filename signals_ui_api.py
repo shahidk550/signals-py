@@ -29,7 +29,7 @@ from wtforms.validators import DataRequired, Length, Email, EqualTo, Regexp #Rul
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user #Helps to manage the logins, logouts and track who is using the site.
 from sqlalchemy.sql import func #Access to dcv functions like sorting data 
 import bcrypt #Tool to securely store the passwords and hash them
-from datetime import datetime #Allows us to work with date and times
+from datetime import datetime, timedelta #Allows us to work with date and times
 import re #Checking for patterns ie if ETA date looks like a date
 import requests 
 import logging
@@ -37,6 +37,8 @@ from flask_wtf.csrf import CSRFProtect
 import json 
 import os 
 from dotenv import load_dotenv
+import urllib.parse
+from datetime import datetime, timedelta, UTC
 
 # Load environment variables (e.g., LOG_FILENAME for logging)
 load_dotenv()
@@ -125,7 +127,10 @@ class SignalSubmitForm(FlaskForm):
     correlation_id = StringField('Correlation ID', validators=[Length(max=100)])
     submit = SubmitField('Submit Signal')
 
-
+class SignalSearchForm(FlaskForm):  # Form for searching signals by date
+    start_date = StringField('Start Date (YYYY-MM-DD)', [Length(max=100), Regexp(r'^\d{4}-\d{2}-\d{2}$|^$', message="Must be in YYYY-MM-DD format.")])
+    end_date = StringField('End Date (YYYY-MM-DD)', validators=[Length(max=100), Regexp(r'^\d{4}-\d{2}-\d{2}$|^$', message="Must be in YYYY-MM-DD format.")])
+    submit = SubmitField('Search Signals')
 
 # Flask-Login user manager 
 @login_manager.user_loader # A decorator that registers a function to load a user from the database based on their ID, which Flask-Login stores in the user's session.
@@ -180,6 +185,35 @@ def refresh_access_token():
         logger.error(f"Token refresh - Connection error: {str(e)}")
         return False
 
+# Helper function to search signals
+def search_signals(isn_slug, signal_type_slug, sem_ver, start_date=None, end_date=None, account_id=None):
+    try:
+        api_url = f"http://localhost:8080/api/isn/{isn_slug}/signal_types/{signal_type_slug}/v{sem_ver}/signals/search"
+        headers = {
+            "Authorization": f"Bearer {session['access_token']}",
+            "Content-Type": "application/json"
+        }
+        params = {}
+        if start_date:
+            params['start_date'] = start_date
+        if end_date:
+            params['end_date'] = end_date
+        if account_id:
+            params['account_id'] = account_id
+
+        # Encode query parameters
+        encoded_params = urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+        full_url = f"{api_url}?{encoded_params}" if params else api_url
+        logger.info(f"API search_signals - Sending to URL: {full_url}")
+
+        response = requests.get(full_url, headers=headers, timeout=10)
+        return response
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API search_signals - Connection error: {str(e)}")
+        return None
+
+#Routes 
 
 @app.route('/api/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
 def register(): #Handles the showing and processing form when ouser submits it.
@@ -315,8 +349,7 @@ def api_login():# Handles user login via API server[](http://localhost:8080/auth
 
 
 
-@app.route('/api/dashboard')
-
+@app.route('/api/dashboard', methods=['GET', 'POST'])
 # Protected route requiring access_token in session
     # Renders dashboard.html with user data from session
 def api_dashboard():
@@ -335,289 +368,201 @@ def api_dashboard():
         # Redirect to /api/login if no token, ending request
         return redirect(url_for('api_login'))
 
-    # Pass SignalSubmitForm to dashboard.html for signal submission
-    form = SignalSubmitForm()
-    # Access session data for rendering dashboard
-    # email and role are passed to dashboard.html for display
-    return render_template('api_dashboard.html', email=session.get('email'), role=session.get('role'), form=form)
+    return render_template('api_dashboard.html', email=session.get('email'), role=session.get('role'))
 
 
-@app.route('/api/submit_signal', methods=['POST'])
+
+@app.route('/api/search_signal', methods=['GET', 'POST'])
+def search_signal():
+    if 'access_token' not in session: 
+        flash('Please log in', 'error')
+        return redirect(url_for('api_login'))
+
+
+    search_form = SignalSearchForm()
+    signals = []
+
+    if search_form.validate_on_submit():
+        start_date = search_form.start_date.data.strip() if search_form.start_date.data else None
+        end_date = search_form.end_date.data.strip() if search_form.end_date.data else None
+        # Extend end_date by 1 day to account for timezone (BST to UTC)
+        if end_date:
+            try:
+                end_date_dt = datetime.strptime(end_date, '%Y-%m-%d')
+                end_date = (end_date_dt + timedelta(days=1)).strftime('%Y-%m-%d')
+            except ValueError:
+                flash('Invalid end date format.', 'error')
+                logger.warning(f"Invalid end_date format: {end_date}")
+                return render_template('api_dashboard.html', email=session.get('email'), role=session.get('role'), submit_form=submit_form, search_form=search_form, signals=signals)
+        account_id = session.get('account_id')
+
+
+
+        response = search_signals(
+            isn_slug='surrey-isn',
+            signal_type_slug='test-signal',
+            sem_ver='0.0.1',
+            start_date=start_date,
+            end_date=end_date,
+            account_id=account_id
+        )
+
+        if response is None:
+            flash('Failed to connect to API.', 'error')
+        elif response.status_code == 200:
+            signals = response.json()
+            logger.info(f"API search_signals - Retrieved {len(signals)} signals")
+        elif response.status_code == 401 and 'access_token_expired' in response.text.lower():
+            if refresh_access_token():
+                response = search_signals(
+                    isn_slug='surrey-isn',
+                    signal_type_slug='test-signal',
+                    sem_ver='0.0.1',
+                    start_date=start_date,
+                    end_date=end_date,
+                    account_id=account_id
+                )
+                if response and response.status_code == 200:
+                    signals = response.json()
+                    logger.info(f"API search_signals - Retrieved {len(signals)} signals after token refresh")
+                else:
+                    flash('Failed to fetch signals after token refresh.', 'error')
+                    logger.warning(f"API search_signals - Failed after refresh: {response.text if response else 'No response'}")
+            else:
+                flash('Session expired. Please log in again.', 'error')
+                return redirect(url_for('api_login'))
+        elif response.status_code == 400:
+            flash('Invalid date format or parameters.', 'error')
+            logger.warning(f"API search_signals - Bad request: {response.text}")
+        else:
+            flash('Failed to fetch signals: API error.', 'error')
+            logger.warning(f"API search_signals - Failed: {response.text}")
+
+    elif request.method == 'GET':
+        # Default: Fetch signals for the last 30 days
+        end_date = datetime.now(UTC).strftime('%Y-%m-%d')
+        start_date = (datetime.now(UTC) - timedelta(days=30)).strftime('%Y-%m-%d')
+        account_id = session.get('account_id')
+
+        response = search_signals(
+            isn_slug='surrey-isn',
+            signal_type_slug='test-signal',
+            sem_ver='0.0.1',
+            start_date=start_date,
+            end_date=end_date,
+            account_id=account_id
+        )
+
+        if response and response.status_code == 200:
+            signals = response.json()
+            logger.info(f"API search_signals - Retrieved {len(signals)} signals on page load")
+        elif response and response.status_code == 401 and 'access_token_expired' in response.text.lower():
+            if refresh_access_token():
+                response = search_signals(
+                    isn_slug='surrey-isn',
+                    signal_type_slug='test-signal',
+                    sem_ver='0.0.1',
+                    start_date=start_date,
+                    end_date=end_date,
+                    account_id=account_id
+                )
+                if response and response.status_code == 200:
+                    signals = response.json()
+                    logger.info(f"API search_signals - Retrieved {len(signals)} signals after token refresh on page load")
+                else:
+                    flash('Failed to fetch signals after token refresh.', 'error')
+                    logger.warning(f"API search_signals - Failed after refresh on page load: {response.text if response else 'No response'}")
+            else:
+                flash('Session expired. Please log in again.', 'error')
+                return redirect(url_for('api_login'))
+        elif response:
+            flash('Failed to fetch signals: API error.', 'error')
+            logger.warning(f"API search_signals - Failed on page load: {response.text}")
+
+    return render_template('api_search_signal.html', email=session.get('email'), role=session.get('role'), search_form=search_form, signals=signals)
+
+
+
+@app.route('/api/submit_signal', methods=['GET', 'POST'])
 def submit_signal():
-    # Handles signal submission to API server[](http://localhost:8080/isn/{isn_slug}/signal_types/{signal_type_slug}/v{sem_ver}/signals)
-    # Uses access_token from session for authentication
-    # Refreshes token on 401 "access_token_expired" and retries
     logger.info('In API submit_signal function')
+    if 'access_token' not in session:
+        flash('Please log in to submit signals.', 'error')
+        return redirect(url_for('api_login'))
+
     form = SignalSubmitForm()
-    if form.validate_on_submit():
+    if request.method == 'POST' and form.validate_on_submit():
         logger.info(f"API submit_signal - Form validated, isn_slug: {form.isn_slug.data}")
 
-        # Check if access_token exists in session
-        if 'access_token' not in session:
-            flash('Please log in to submit signals.', 'error')
-            return redirect(url_for('api_login'))
-
         def send_signal_request():
-            # Helper function to send signal request (allows retry after refresh)
             try:
-                # Parse content as JSON
                 content = json.loads(form.content.data)
             except json.JSONDecodeError:
                 flash('Invalid JSON format in content.', 'error')
                 logger.warning('API submit_signal - Invalid JSON in content')
-                return redirect(url_for('api_dashboard'))
-
-            # Construct signal payload
+                return None
             signal = {
                 "content": content,
                 "local_ref": form.local_ref.data
             }
             if form.correlation_id.data:
                 signal["correlation_id"] = form.correlation_id.data
-
-            payload = {
-                "signals": [signal]
-            }
-
-            # Construct API URL
+            payload = {"signals": [signal]}
             api_url = f"http://localhost:8080/api/isn/{form.isn_slug.data}/signal_types/{form.signal_type_slug.data}/v{form.sem_ver.data}/signals"
             logger.info(f"API submit_signal - Sending to URL: {api_url}, Payload: {json.dumps(payload)}")
-
-
-            # Send POST request to API server with access_token
             headers = {
                 "Authorization": f"Bearer {session['access_token']}",
                 "Content-Type": "application/json"
             }
-            response = requests.post(
-                api_url,
-                json=payload,
-                headers=headers,
-                timeout=10
-            )
+            response = requests.post(api_url, json=payload, headers=headers, timeout=10)
             return response
 
-        # Attempt to send signal
         response = send_signal_request()
-        logger.info(f"API submit_signal - Status: {response.status_code}, Body: {response.text}")
-
-        if response.status_code == 401 and 'access_token_expired' in response.text.lower():
-            # Access token expired; attempt to refresh
-            if refresh_access_token():
-                # Retry signal submission with new token
-                response = send_signal_request()
-                logger.info(f"API submit_signal - Retry status: {response.status_code}, Body: {response.text}")
+        if response:
+            logger.info(f"API submit_signal - Status: {response.status_code}, Body: {response.text}")
+            if response.status_code == 401 and 'access_token_expired' in response.text.lower():
+                if refresh_access_token():
+                    response = send_signal_request()
+                    if response:
+                        logger.info(f"API submit_signal - Retry status: {response.status_code}, Body: {response.text}")
+                    else:
+                        flash('Failed to submit signal after token refresh.', 'error')
+                        return render_template('api_submit_signal.html', email=session.get('email'), role=session.get('role'), submit_form=form)
+                else:
+                    flash('Session expired. Please log in again.', 'error')
+                    return redirect(url_for('api_login'))
+            if response.status_code == 201:
+                data = response.json()
+                flash(f"Signal submitted successfully! Stored signals: {len(data.get('stored_signals', []))}", 'success')
+                logger.info(f"API submit_signal - Success for local_ref: {form.local_ref.data}")
+                return redirect(url_for('api_dashboard'))
+            elif response.status_code == 400:
+                error_msg = response.json().get('error', 'Invalid request')
+                if 'invalid_correlation_id' in response.text:
+                    error_msg = 'Invalid correlation ID: must reference an existing signal of the same type.'
+                flash(f"Submission failed: {error_msg}", 'error')
+                logger.warning(f"API submit_signal - Bad request: {response.text}")
+            elif response.status_code == 401:
+                flash('Unauthorized: Invalid token or insufficient permissions.', 'error')
+                logger.warning('API submit_signal - Unauthorized')
+            elif response.status_code == 404:
+                flash('Submission failed: ISN or signal type not found.', 'error')
+                logger.warning(f"API submit_signal - Not found: {response.text}")
             else:
-                # Refresh failed (invalid refresh token)
-                flash('Session expired. Please log in again.', 'error')
-                return redirect(url_for('api_login'))
-
-        # Handle response
-        if response.status_code == 201:
-            # Signal stored successfully
-            data = response.json()
-            flash(f"Signal submitted successfully! Stored signals: {len(data.get('stored_signals', []))}", 'success')
-            logger.info(f"API submit_signal - Success for local_ref: {form.local_ref.data}")
-            return redirect(url_for('api_dashboard'))
-
-        elif response.status_code == 400:
-            # Handle validation errors (e.g., missing fields, invalid correlation_id)
-            error_msg = response.json().get('error', 'Invalid request')
-            if 'invalid_correlation_id' in response.text:
-                error_msg = 'Invalid correlation ID: must reference an existing signal of the same type.'
-            flash(f"Submission failed: {error_msg}", 'error')
-            logger.warning(f"API submit_signal - Bad request: {response.text}")
-
-        elif response.status_code == 401:
-            # Other unauthorized errors (e.g., invalid token, no ISN permission)
-            flash('Unauthorized: Invalid token or insufficient permissions.', 'error')
-            logger.warning('API submit_signal - Unauthorized')
-            return redirect(url_for('api_dashboard'))
-
-        elif response.status_code == 404:
-            # ISN, signal type, or version not found
-            flash('Submission failed: ISN or signal type not found. Please check the ISN and signal type.', 'error')
-            logger.warning(f"API submit_signal - Not found: {response.text}")
-
+                flash('Submission failed: API server error.', 'error')
+                logger.warning(f"API submit_signal - Failed: {response.text}")
         else:
-            # Other errors (e.g., 500)
-            flash('Submission failed: API server error.', 'error')
-            logger.warning(f"API submit_signal - Failed: {response.text}")
+            flash('Failed to connect to API.', 'error')
+            logger.warning('API submit_signal - No response')
 
-        return redirect(url_for('api_dashboard'))
-
-    else:
+    elif request.method == 'POST':
         logger.debug(f"API submit_signal - Form validation failed: {form.errors}")
         for field, errors in form.errors.items():
             for error in errors:
                 flash(f"Error in {field}: {error}", 'error')
-        return redirect(url_for('api_dashboard'))
 
+    return render_template('api_submit_signal.html', email=session.get('email'), role=session.get('role'), submit_form=form)
 
-
-'''
-
-#Defines the web address (/register) for the registration page
-@app.route('/todo/register', methods=['GET', 'POST']) # Decorator that links the URL '/register' to the 'register' function. It handles both GET requests (when a user visits the page) and POST requests (when the user submits the registration form).
-def old_register(): #Handles the showing and processing form when user submits it.
-    if current_user.is_authenticated: # Checks if the current user is already logged in. 'current_user' is provided by Flask-Login.
-        return redirect(url_for('index')) # If logged in, redirects the user to the main page (route named 'index').
-    form = RegisterForm() # Creates an instance of the 'RegisterForm'.
-    print(f"Request method: {request.method}") # Prints the HTTP method of the current request (GET or POST) for debugging.
-    print(f"Form data: {request.form}") # Prints the data submitted in the form for debugging.
-    print(f"Session data: {session.get('csrf_token', 'No CSRF token in session')}") # Prints the CSRF token from the session (used for security against cross-site request forgery) for debugging.
-    if form.validate_on_submit(): # Checks if the registration form has been submitted (POST request) and if all the validators in the form have passed.
-        print("Form validated successfully") # Prints a success message if the form is valid.
-        # Check if email exists
-        if User.query.filter_by(email=form.email.data).first(): # Queries the 'User' table to see if a user with the entered email already exists. '.first()' returns the first matching user or None.
-            flash('Email already taken.', 'error') # If the email exists, it displays an error message to the user using Flask's 'flash' system.
-            return render_template('register.html', form=form) # Re-renders the registration form with the error message.
-        # Hash password
-        hashed_password = bcrypt.hashpw(form.password.data.encode('utf-8'), bcrypt.gensalt()) # Hashes the user's password using bcrypt. It first encodes the password as bytes and then generates a salt (random data) to make the hash more secure.
-        user = User(  # Creates a new 'User' object to be stored in the database.
-            email=form.email.data, # Sets the email of the new user.
-            password=hashed_password.decode('utf-8'), # Sets the hashed password of the new user (decoding it back to a string for storage).
-            provider='local',  # Sets the registration provider as 'local' (as opposed to OAuth).
-            role='user'  # Sets the default role for a new user as 'user'.
-        )
-        try: # Starts a 'try' block to handle potential database errors.
-            db.session.add(user) # Adds the new 'User' object to the database session (staging it to be saved).
-            db.session.commit() # Commits the changes to the database, actually saving the new user.
-            flash('Registration successful! Please log in.', 'success') # If registration is successful, displays a success message.
-            print("User registered, redirecting to login") # Prints a log message.
-            return redirect(url_for('login')) # Redirects the user to the login page.
-        except Exception as e: # Catches any exceptions (errors) that might occur during database operations.
-            db.session.rollback() # If an error occurred, it rolls back the database session to its previous state, preventing partial saves.
-            flash(f'Error: {str(e)}', 'error') # Displays a generic error message to the user.
-            print(f"Database error: {str(e)}") # Prints the specific database error to the console for debugging.
-            return render_template('register.html', form=form) # Re-renders the registration form with the error message.
-    else: # If the form validation fails (e.g., passwords don't match, email is invalid).
-        print("Form validation failed") # Prints a log message indicating validation failure.
-        print(f"Form errors: {form.errors}") # Prints the specific validation errors for debugging.
-    return render_template('register.html', form=form) # Renders the registration form (for the initial GET request or if validation fails).
-
-
-@app.route('/todo/login', methods=['GET', 'POST'])  # Decorator for the login page URL, handling both displaying the form (GET) and processing the login attempt (POST).
-def login(): # Handles showing the login form and checking user credentials upon submission.
-    if current_user.is_authenticated: # Checks if the current user is already logged in.
-        return redirect(url_for('index')) # If logged in, redirects to the main page.
-    form = LoginForm() # Creates an instance of the 'LoginForm'.
-    if form.validate_on_submit(): # Checks if the login form has been submitted and is valid.
-        user = User.query.filter_by(email=form.email.data).first() # Queries the 'User' table for a user with the entered email.
-        if user and bcrypt.checkpw(form.password.data.encode('utf-8'), user.password.encode('utf-8')): # Checks if a user with the given email exists AND if the entered password (encoded as bytes) matches the hashed password stored in the database.
-            login_user(user) # Logs the user in using Flask-Login, which sets up the user's session.
-            return redirect(url_for('index'))  # Redirects the logged-in user to the main page.
-        flash('Invalid email or password.', 'error') # If the login fails (wrong email or password), displays an error message.
-    return render_template('login.html', form=form) # Renders the login form (for the initial GET request or if login fails).
-
-@app.route('/todo/logout') # Decorator for the logout URL.
-@login_required # Flask-Login decorator that ensures only logged-in users can access this route.
-def logout(): # Handles the user logout process.
-    logout_user() # Logs the current user out using Flask-Login, clearing their session.
-    flash('You have been logged out.', 'success')  # Displays a success message.
-    return redirect(url_for('login')) # Redirects the user back to the login page.
-
-#Main page where users can see list of signals 
-@app.route("/todo/list", methods=["POST", "GET"]) # if user visits [GET] show signals. If user submits a form [POST] if valid create new signal.
-@login_required # Ensures only logged-in users can access this page.
-def index(): # Handles displaying the list of signals and adding new ones.
-    form = SignalForm() # Creates an instance of the 'SignalForm' for adding new signals.
-    if current_user.role == 'admin': # Checks if the current user's role is 'admin'.
-        tasks = MyTask.query.order_by(MyTask.eta.asc().nullslast()).all() #If the user is an admin, fetches all tasks from the database, ordered by their ETA (earliest first, with null ETAs last).
-    else: # If the user is not an admin (their role is likely 'user')
-        tasks = MyTask.query.filter_by(user_id=current_user.id).order_by(MyTask.eta.asc().nullslast()).all() #Get the data/signals from table named Mytask but only of those matching user_id and sort them by eta, ascencing (asc) order including those with no ETA
-    print(f"Current user: {current_user.email}, Role: {current_user.role}, ID: {current_user.id}") # Prints information about the currently logged-in user for debugging.
-    print(f"Retrieved tasks: {[f'Task {task.id} - {task.signal_from} (User ID: {task.user_id})' for task in tasks]}") # Prints a list of the retrieved tasks for debugging.
-    if request.method == "POST": # Checks if the request method is POST (meaning a form has been submitted).
-        print(f"POST form data: {request.form}") # Prints the data from the submitted form for debugging.
-        if form.validate_on_submit(): # Checks if the submitted form data is valid according to the validators defined in the 'SignalForm' class.
-            eta_str = form.eta.data.strip() # Gets the ETA data from the form and removes any leading or trailing whitespace.
-            if eta_str: # Checks if the ETA string is not empty.
-                try: # Starts a 'try' block to handle potential errors when converting the ETA string to a datetime object.
-                    datetime.strptime(eta_str, '%d-%m-%Y') # Attempts to convert the ETA string into a datetime object based on the 'dd-mm-yyyy' format. If the format is incorrect, it will raise a ValueError.
-                except ValueError: # Catches the ValueError if the ETA string is not in the expected format.
-                    flash('Invalid ETA date (e.g., 32-01-2025 is not valid).', 'error') # Displays an error message to the user.
-                    print("ETA validation failed") # Prints a log message indicating ETA validation failure.
-                    return render_template('index.html', tasks=tasks, form=form) # Re-renders the main page with the current tasks and the form, including the error message.
-            try: # Starts a 'try' block to handle potential database errors during task creation.
-                new_task = MyTask( # Creates a new 'MyTask' object with the data from the submitted form.
-                    signal_from=form.signal_from.data,
-                    commodity=form.commodity.data,
-                    departure=form.departure.data,
-                    arrival_port=form.arrival_port.data,
-                    eta=eta_str if eta_str else None,  # If eta_str has a value, use it; otherwise, set ETA to None.
-                    complete=None, # Initially, the task is not complete.
-                    created=datetime.utcnow(), # Sets the creation timestamp to the current UTC time.
-                    user_id=current_user.id # Links the new task to the ID of the currently logged-in user.
-                )
-                db.session.add(new_task) # Adds the new task to the database session.
-                db.session.commit() # Commits the changes to the database, saving the new task.
-                flash('Signal added successfully.', 'success') # Displays a message to the user indicating that the signal was added successfully.
-                print(f"Signal created: {new_task.__repr__()}") # Prints a message to the console 
-                return redirect("/list") # Sends the user's browser to the '/list' URL
-            except Exception as e: #This starts a block of code that will handle any errors that might occur in the 'try' block above (e.g., issues with the database). 'e' will contain information about the error.
-                db.session.rollback() # If an error occurred, this line undoes any changes that were attempted in the database session
-                flash(f'Error: {str(e)}', 'error') # Displays an error message to the user, including the specific error that occurred. 'error' is another category for the message, usually styled to indicate a problem.
-                print(f"Database error: {str(e)}") # Prints the specific database error to the console for debugging.
-        else: # This 'else' block runs if the `if form.validate_on_submit():` condition was false, meaning the submitted form data was not valid according to the rules set.
-            print(f"Form validation failed: {form.errors}") # Prints the specific validation errors to the console
-        return render_template('index.html', tasks=tasks, form=form) # Regardless of whether the form was submitted or if it was invalid, this line renders the 'index.html' template, passing the list of tasks and the form object to it so they can be displayed on the webpage.
-    return render_template('index.html', tasks=tasks, form=form) # This line is reached if the request method was GET (the user just visited the '/list' page), and it renders the 'index.html' template to display the initial list of tasks and the empty form for adding new signals.
-
-#Allows logged in users to delete thier own signals 
-@app.route("/todo/delete/<int:id>") # This decorator defines a new URL route '/delete/<int:id>'. When a user visits a URL like '/delete/123', the 'delete' function will be executed, and 'id' will be the number in the URL (e.g., 123). '<int:id>' specifies that 'id' should be treated as an integer.
-@login_required # Ensures that only logged-in users can access this URL.
-def delete(id): # This function handles the deletion of a specific signal based on its ID.
-    task = MyTask.query.get_or_404(id) # This line tries to find a 'MyTask' object in the database with the given 'id'. If a task with that ID is found, it's stored in the 'task' variable. If no task is found, it automatically returns a 404 (Not Found) error to the user.
-    if task.user_id != current_user.id:  # This checks if the 'user_id' of the task (the user who created it) is different from the ID of the currently logged-in user.
-        flash('Unauthorised action: You can only delete your own signal') # If the task doesn't belong to the current user, it displays an error message.
-        return redirect(url_for('index')) # And then redirects the user back to the main list of signals.
-    try: # Starts a 'try' block to handle potential database errors during deletion.
-        db.session.delete(task)  # This marks the 'task' object for deletion in the database session.
-        db.session.commit() # This line actually executes the deletion in the database.
-        flash('Signal deleted successfully.', 'success') # Displays a success message to the user.
-        return redirect("/list") # Redirects the user back to the list of signals, which should now be updated.
-    except Exception as e: # Catches any errors that might occur during the database operations.
-        db.session.rollback()  # If an error occurred, this line undoes any changes in the session.
-        flash(f'Error: {str(e)}', 'error') # Displays an error message to the user.
-        tasks = MyTask.query.filter_by(user_id=current_user.id).order_by(MyTask.eta.asc().nullslast()).all() # If there was an error, it re-fetches the user's tasks to ensure the page can still be displayed.
-        return render_template('index.html', tasks=tasks, form=SignalForm()) # Renders the main list page again, possibly with the error message.
-
-
-#Allows logged in users to edit their own signals and updates existing data and database. 
-@app.route("/todo/edit/<int:id>", methods=["GET", "POST"]) # This decorator defines a URL route '/edit/<int:id>' that handles both GET requests (to display the edit form) and POST requests (to submit the edited data).
-@login_required # Ensures only logged-in users can access this URL.
-def edit(id: int): # This function handles the editing of a specific signal based on its ID.
-    task = MyTask.query.get_or_404(id) # Retrieves the 'MyTask' object with the given 'id' from the database, or returns a 404 error if not found.
-    if task.user_id != current_user.id:  # Checks if the task belongs to the currently logged-in user.
-        flash('Unauthorised action: You can only edit your own signals')  # Displays an error if the user tries to edit someone else's signal.
-        return redirect(url_for('index')) # Redirects back to the main list.
-    form = SignalForm(obj=task) # Creates an instance of the 'SignalForm' and pre-populates it with the existing data from the 'task' object. This makes it easy to display the current values in the edit form.
-    if request.method == "POST": # Checks if the request method is POST, meaning the user has submitted the edit form.
-        if form.validate_on_submit(): # Validates the submitted form data against the rules defined in 'SignalForm'.
-            eta_str = form.eta.data.strip() # Gets the ETA data from the form and removes any extra whitespace.
-            if eta_str: # Checks if the ETA string is not empty.
-                try: # Tries to parse the ETA string into a datetime object to validate its format.
-                    datetime.strptime(eta_str, '%d-%m-%Y')
-                except ValueError:  # If the ETA format is invalid, this error is caught.
-                    flash('Invalid ETA date (e.g., 32-01-2025 is not valid).', 'error') # Shows an error message to the user.
-                    return render_template('edit.html', task=task, form=form) # Re-renders the edit form with the error.
-            try: # Starts a 'try' block for database operations.
-                task.signal_from = form.signal_from.data # Updates the 'signal_from' attribute of the 'task' object with the value from the form.
-                task.commodity = form.commodity.data # Updates the 'commodity' attribute....
-                task.departure = form.departure.data
-                task.arrival_port = form.arrival_port.data
-                task.eta = eta_str if eta_str else None # Updates the 'eta' attribute.
-                db.session.commit() # Saves the changes made to the 'task' object in the database.
-                flash('Signal updated successfully.', 'success') # Shows a success message.
-                return redirect("/list") # Redirects the user back to the main list.
-            except Exception as e:  # Catches any database errors.
-                db.session.rollback() # Undoes any changes in the session.
-                flash(f'Error: {str(e)}', 'error') # Displays an error message.
-        return render_template('edit.html', task=task, form=form) # If the form submission was not valid, re-renders the edit form with validation errors.
-    return render_template('edit.html', task=task, form=form)  # For a GET request (when the user first visits the edit page), this renders the 'edit.html' template, pre-filled with the 'task' data in the 'form'.
-
-'''
 #Only runs the code when Python file is executed directly
 if __name__ == '__main__': # This is a standard Python construct that checks if the script is being run directly (not imported as a module).
     with app.app_context(): # Creates an application context. This is needed for certain operations like database interactions outside of a request context.

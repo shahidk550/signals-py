@@ -1,12 +1,27 @@
 {% extends 'base.html' %}
 
 {% block head %}
-<title>API Dashboard - CO Signal App</title>
+<title>Dashboard - CO Signal App</title>
+<style>
+    .alert {
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 4px;
+    }
+    .alert-success {
+        background-color: #dff0d8;
+        color: #3c763d;
+    }
+    .alert-error {
+        background-color: #f2dede;
+        color: #a94442;
+    }
+</style>
 {% endblock %}
 
 {% block body %}
 <div class="content">
-    <h2>Welcome, {{ email }}!</h2>
+    <h1>Welcome, {{ email }}!</h1>
     <p>Role: {{ role }}</p>
     {% with messages = get_flashed_messages(with_categories=True) %}
         {% if messages %}
@@ -15,59 +30,8 @@
             {% endfor %}
         {% endif %}
     {% endwith %}
-    <h3>Submit a Signal</h3>
-    <form action="{{ url_for('submit_signal') }}" method="POST" class="signal-form">
-        {{ form.hidden_tag() }}
-        <div class="form-group">
-            <label for="isn_slug">{{ form.isn_slug.label }}</label>
-            {{ form.isn_slug(id="isn_slug") }}
-            {% for error in form.isn_slug.errors %}
-                <span class="error">{{ error }}</span>
-            {% endfor %}
-        </div>
-        <div class="form-group">
-            <label for="signal_type_slug">{{ form.signal_type_slug.label }}</label>
-            {{ form.signal_type_slug(id="signal_type_slug") }}
-            {% for error in form.signal_type_slug.errors %}
-                <span class="error">{{ error }}</span>
-            {% endfor %}
-        </div>
-        <div class="form-group">
-            <label for="sem_ver">{{ form.sem_ver.label }}</label>
-            {{ form.sem_ver(id="sem_ver") }}
-            {% for error in form.sem_ver.errors %}
-                <span class="error">{{ error }}</span>
-            {% endfor %}
-        </div>
-        <div class="form-group">
-            <label for="local_ref">{{ form.local_ref.label }}</label>
-            {{ form.local_ref(id="local_ref") }}
-            {% for error in form.local_ref.errors %}
-                <span class="error">{{ error }}</span>
-            {% endfor %}
-        </div>
-        <div class="form-group">
-            <label for="content">{{ form.content.label }}</label>
-            {{ form.content(id="content", rows=5) }}
-            <br>
-            <small class="form-text">Enter a JSON object, e.g., <code>{"commodity": "Beef", "origin": "Poland", "cn_code": "01932", "port": "Calais"}</code></small>
-            {% for error in form.content.errors %}
-                <span class="error">{{ error }}</span>
-            {% endfor %}
-        </div>
-        <div class="form-group">
-            <label for="correlation_id">{{ form.correlation_id.label }}</label>
-            {{ form.correlation_id(id="correlation_id") }}
-            {% for error in form.correlation_id.errors %}
-                <span class="error">{{ error }}</span>
-            {% endfor %}
-        </div>
-        <div class="form-group">
-            {{ form.submit(id="btn_submit_signal", value="Submit Signal") }}
-        </div>
-    </form>
-    <div class="signal-form">
-        <p><a href="{{ url_for('api_login') }}">Log in again</a> | <a href="{{ url_for('register') }}">Register</a></p>
-    </div>
+    <p><a href="{{ url_for('search_signal') }}">Search Signals</a></p>
+    <p><a href="{{ url_for('submit_signal') }}">Submit a Signal</a></p>
+    <p><a href="{{ url_for('api_login') }}">Log in again</a> | <a href="{{ url_for('register') }}">Register</a></p>
 </div>
 {% endblock %}

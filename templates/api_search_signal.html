@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block head %}
+<title>Search Signals - CO Signal App</title>
+<style>
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+    }
+    th, td {
+        padding: 8px;
+        border: 1px solid #ddd;
+        text-align: left;
+    }
+    th {
+        background-color: #f2f2f2;
+    }
+    tr:hover {
+        background-color: #f5f5f5;
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="content">
+    <h1>Search Signals</h1>
+    <p>Welcome, {{ email }}! Role: {{ role }}</p>
+    {% with messages = get_flashed_messages(with_categories=True) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('search_signal') }}" method="POST" class="signal-form">
+        {{ search_form.hidden_tag() }}
+        <div class="form-group">
+            <label for="start_date">{{ search_form.start_date.label }}</label>
+            {{ search_form.start_date(id="start_date", placeholder="YYYY-MM-DD") }}
+            {% for error in search_form.start_date.errors %}
+                <span class="error">{{ error }}</span>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            <label for="end_date">{{ search_form.end_date.label }}</label>
+            {{ search_form.end_date(id="end_date", placeholder="YYYY-MM-DD") }}
+            {% for error in search_form.end_date.errors %}
+                <span class="error">{{ error }}</span>
+            {% endfor %}
+        </div>
+        <div class="form-group">
+            {{ search_form.submit(id="btn_search_signals", value="Search Signals") }}
+        </div>
+    </form>
+
+    <h2>Signals</h2>
+    {% if signals %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Local Ref</th>
+                    <th>Commodity</th>
+                    <th>Origin</th>
+                    <th>CN Code</th>
+                    <th>Port</th>
+                    <th>Created At</th>
+                    <th>Correlation</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for signal in signals %}
+                    <tr>
+                        <td>{{ signal.local_ref }}</td>
+                        <td>{{ signal.content.get('commodity', '-') }}</td>
+                        <td>{{ signal.content.get('origin', '-') }}</td>
+                        <td>{{ signal.content.get('cn_code', '-') }}</td>
+                        <td>{{ signal.content.get('port', '-') }}</td>
+                        <td>{{ signal.created_at }}</td>
+                        <td>{{ signal.correlated_local_ref or '-' }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No signals found. Try adjusting the date range or submit a new signal.</p>
+    {% endif %}
+
+    <p><a href="{{ url_for('api_dashboard') }}">Back to Dashboard</a> | <a href="{{ url_for('submit_signal') }}">Submit a Signal</a> | <a href="{{ url_for('api_login') }}">Log in again</a></p>
+</div>
+{% endblock %}
