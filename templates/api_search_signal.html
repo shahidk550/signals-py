@@ -61,24 +61,22 @@
             <thead>
                 <tr>
                     <th>Local Ref</th>
-                    <th>Commodity</th>
-                    <th>Origin</th>
-                    <th>CN Code</th>
-                    <th>Port</th>
+                    <th>VRN</th>
+                    <th>Arrival Time</th>
+                    <th>Location</th>
                     <th>Created At</th>
-                    <th>Correlation</th>
+                    <th>Correlation ID</th>
                 </tr>
             </thead>
             <tbody>
                 {% for signal in signals %}
                     <tr>
                         <td>{{ signal.local_ref }}</td>
-                        <td>{{ signal.content.get('commodity', '-') }}</td>
-                        <td>{{ signal.content.get('origin', '-') }}</td>
-                        <td>{{ signal.content.get('cn_code', '-') }}</td>
-                        <td>{{ signal.content.get('port', '-') }}</td>
-                        <td>{{ signal.created_at }}</td>
-                        <td>{{ signal.correlated_local_ref or '-' }}</td>
+                        <td>{{ signal.content.get('content', {}).get('VRN', '-') }}</td>
+                        <td>{{ signal.content.get('content', {}).get('arrival_time', '-') }}</td>
+                        <td>{{ signal.content.get('content', {}).get('location', '-') }}</td>
+                        <td>{{ signal.created_at }}</td>
+                        <td>{{ signal.correlation_id | default('-') }}</td>
                     </tr>
                 {% endfor %}
             </tbody>

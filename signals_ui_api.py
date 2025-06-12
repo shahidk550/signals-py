@@ -399,8 +399,8 @@ def search_signal():
 
 
         response = search_signals(
-            isn_slug='surrey-isn',
-            signal_type_slug='test-signal',
+            isn_slug='teeside-freeport',
+            signal_type_slug='geofence-events',
             sem_ver='0.0.1',
             start_date=start_date,
             end_date=end_date,
@@ -410,13 +410,29 @@ def search_signal():
         if response is None:
             flash('Failed to connect to API.', 'error')
         elif response.status_code == 200:
-            signals = response.json()
+            signals_raw = response.json()
+
+            logger.info(f"RAW Signals from API (POST path): {signals_raw}")
+            parsed_signals = []
+            for s in signals_raw:
+                if 'content' in s and isinstance(s['content'], str):
+                    try:
+                        s['content'] = json.loads(s['content'])
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse content JSON for signal (local_ref: {s.get('local_ref')}): {s['content']}")
+                        s['content'] = {} # Default to empty dict if parsing fails
+                parsed_signals.append(s)
+            signals = parsed_signals # Assign the parsed list to signals
+            logger.info(f"PARSED Signals before rendering (POST path): {signals}")
+
+            logger.info(f"API search_signals - Retrieved {len(signals)} signals")
+
             logger.info(f"API search_signals - Retrieved {len(signals)} signals")
         elif response.status_code == 401 and 'access_token_expired' in response.text.lower():
             if refresh_access_token():
                 response = search_signals(
-                    isn_slug='surrey-isn',
-                    signal_type_slug='test-signal',
+                    isn_slug='teeside-freeport',
+                    signal_type_slug='geofence-events',
                     sem_ver='0.0.1',
                     start_date=start_date,
                     end_date=end_date,
@@ -445,8 +461,8 @@ def search_signal():
         account_id = session.get('account_id')
 
         response = search_signals(
-            isn_slug='surrey-isn',
-            signal_type_slug='test-signal',
+            isn_slug='teeside-freeport',
+            signal_type_slug='geofence-events',
             sem_ver='0.0.1',
             start_date=start_date,
             end_date=end_date,
@@ -459,8 +475,8 @@ def search_signal():
         elif response and response.status_code == 401 and 'access_token_expired' in response.text.lower():
             if refresh_access_token():
                 response = search_signals(
-                    isn_slug='surrey-isn',
-                    signal_type_slug='test-signal',
+                    isn_slug='teeside-freeport',
+                    signal_type_slug='geofence-events',
                     sem_ver='0.0.1',
                     start_date=start_date,
                     end_date=end_date,
